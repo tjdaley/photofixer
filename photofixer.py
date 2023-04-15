@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from PIL import Image, ExifTags, ImageDraw, ImageFont
 from pillow_heif import register_heif_opener
-from pydotenv import load_dotenv
+from dotenv import load_dotenv
 load_dotenv()
 
 
