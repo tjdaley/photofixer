@@ -39,6 +39,8 @@ python-dotenv | Processing the *.env* file into os.environ dictionary
 These are all referenced in the accompanying ```requirements.txt``` file and can be installed like this:
 
 ```
+python -m venv venv
+venv/scripts/activate.bat  # Windows
 pip install -r requirements.txt
 ```
 
