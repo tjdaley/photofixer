@@ -36,17 +36,17 @@ class PhotoFixer():
 		register_heif_opener()
 		
 	def date_taken(self, img):
-	"""
-	Return a string containing the date the photograph was taken. Uses the *filename_date_format*
-	environment variable to specify the format of the output string. If unable to determine the date
-	then an empty string is returned.
-	
-	Args:
-		img (PIL.Image): Image data to read.
-	
-	Returns:
-		(str): Date from image metadata or an empty string if none found.
-	"""
+		"""
+		Return a string containing the date the photograph was taken. Uses the *filename_date_format*
+		environment variable to specify the format of the output string. If unable to determine the date
+		then an empty string is returned.
+
+		Args:
+			img (PIL.Image): Image data to read.
+
+		Returns:
+			(str): Date from image metadata or an empty string if none found.
+		"""
 		result = ''
 		try:
 			date_taken_str = img._getexif.get(36867)
@@ -58,16 +58,16 @@ class PhotoFixer():
 		return result
 		
 	def base_name(self, filepath: str) -> str:
-	"""
-	Return a string containing just the base name of the file, without the path and without
-	the file type extension. For example ```/path/filename.jpg``` results in ```filename```.
-	
-	Args:
-		filepath (str): Full path to the file
-	
-	Returns:
-		(str): Base filename.
-	"""
+		"""
+		Return a string containing just the base name of the file, without the path and without
+		the file type extension. For example ```/path/filename.jpg``` results in ```filename```.
+
+		Args:
+			filepath (str): Full path to the file
+
+		Returns:
+			(str): Base filename.
+		"""
 		filename = os.path.basename(filepath)
 		name_parts = os.path.splitext(filename)[0].split('.')
 		if len(name_parts) > 1:
@@ -77,6 +77,9 @@ class PhotoFixer():
 		return result
 		
 	def meta_list(self, filepath: str):
+		"""
+		Method for testing reading metadata.
+		"""
 		with Image.open(filepath) as img:
 			if hasattr(img, "_getexif"):
 				exif_data = img._getexif()
@@ -87,15 +90,15 @@ class PhotoFixer():
 		return {}
 		
 	def bates_stamp(self, img):
-	"""
-	Apply a Bates stamp to the image.
-	
-	Args:
-		img (PIL.Image): Image data to which to add the Bates stamp.
-		
-	Returns:
-		(PIL.Image): Modified image
-	"""
+		"""
+		Apply a Bates stamp to the image.
+
+		Args:
+			img (PIL.Image): Image data to which to add the Bates stamp.
+
+		Returns:
+			(PIL.Image): Modified image
+		"""
 		bates_num_str = (('0'*self.bates_digits) + str(self.bates_number))[-self.bates_digits:]
 		bates_str = f'{self.bates_prefix}{bates_num_str}{self.bates_suffix}'
 		draw = ImageDraw.Draw(img)
@@ -118,15 +121,15 @@ class PhotoFixer():
 		return img
 		
 	def resize(self, img):
-	"""
-	Resize an image to a uniform, fixed size, preserving the aspect ratio.
-	
-	Args:
-		img (PIL.Image): Input image data from original image file.
-	
-	Returns:
-		(PIL.Image): New image, resized per values set in environment variables.
-	"""
+		"""
+		Resize an image to a uniform, fixed size, preserving the aspect ratio.
+
+		Args:
+			img (PIL.Image): Input image data from original image file.
+
+		Returns:
+			(PIL.Image): New image, resized per values set in environment variables.
+		"""
 		original_width, original_height = img.size
 		if original_width >= original_height:
 			aspect_ratio = original_height / original_width
@@ -141,17 +144,17 @@ class PhotoFixer():
 		return img.resize((target_width_px, target_height_px))
 		
 	def convert(self, filepath: str, output_path: str):
-	"""
-	Read an image file, extract the date it was taken, resize the image, and apply
-	a Bates label.
-	
-	Args:
-		filepath (str): Path to the input file, e.g. /input/holiday/photo1.png
-		output_path (str): Path for the output file, e.g. /output/holiday
-	
-	Returns:
-		None
-	"""
+		"""
+		Read an image file, extract the date it was taken, resize the image, and apply
+		a Bates label.
+
+		Args:
+			filepath (str): Path to the input file, e.g. /input/holiday/photo1.png
+			output_path (str): Path for the output file, e.g. /output/holiday
+
+		Returns:
+			None
+		"""
 		with Image.open(filepath) as img:
 			date_str = self.date_taken(img)
 			img = self.resize(img)
