@@ -60,7 +60,7 @@ Staring Bates number                           : 1
 
 I developed this on a Windows platform, which prevented me from integrating the *pyheif* package for reading metadata from *.heic* files. Also, none of my test images contained Exif data. A useful enhancement would be to extract the Date the photograph was taken and include it either in the image in a manner similar to the Bates label or in the filename. A common objection to photographs in trial is that they are undated. For the most part, that is an invalid objection so long as the sponsoring witness can attest that the photograph is an accurate representation of that which it depicts at the time relevant to the witness's testimony. Nonetheless, preserving that information would help the attorney generate a timeline of events and overcome objections, however meritless they may be.
 
-### Using Interface
+### User Interface
 
 This implementation uses the Python *input()* function to obtain runtime parameters. A simple GUI whether implemented as a Python-based GUI or a browser-based GUI that calls on a server would make this more usable. It would also be useful to process command-line arguments for runtime parameters.
 
