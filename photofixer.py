@@ -4,8 +4,9 @@ photofixer.py - Class for fixing photos to produce in discovery
 import json
 import os
 from datetime import datetime
-from PIL import Image, ExifTags, ImageDraw, ImageFont
+from PIL import Image, ExifTags, ImageDraw, ImageFont, ImageOps
 from pillow_heif import register_heif_opener
+import shutil
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -17,7 +18,7 @@ class PhotoFixer():
 	def __init__(self, root_dir: str = 'input', output_path: str = 'output'):
 		self.root_dir = root_dir
 		self.output_path = output_path
-		self.font_size = int(os.environ.get('font_size', 14))
+		self.font_size = int(os.environ.get('font_size', 36))
 		self.text_color = os.environ.get('text_color', 'black')
 		self.box_color = os.environ.get('box_color', 'white')
 		self.text_margin = int(os.environ.get('bates_margin', 4)) * 2
@@ -33,6 +34,7 @@ class PhotoFixer():
 		self.target_dpi = int(os.environ.get('target_dpi', 300))
 		self.filename_date_format = os.environ.get('filename_date_format', '%Y-%m-%d')
 		self.points_per_inch = int(os.environ.get('points_per_inch', 72))
+		self.valid_file_types = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
 		register_heif_opener()
 		
 	def date_taken(self, img):
@@ -99,7 +101,11 @@ class PhotoFixer():
 		Returns:
 			(PIL.Image): Modified image
 		"""
-		bates_num_str = (('0'*self.bates_digits) + str(self.bates_number))[-self.bates_digits:]
+		# If user starts with 0, then we don't want to stamp anything.
+		if self.bates_number == 0:
+			return img, ''
+
+		bates_num_str = self.bates_num_str()
 		bates_str = f'{self.bates_prefix}{bates_num_str}{self.bates_suffix}'
 		draw = ImageDraw.Draw(img)
 		left, top, right, bottom = draw.textbbox((0,0), bates_str, self.font)
@@ -118,9 +124,45 @@ class PhotoFixer():
 			font=self.font
 		)
 		self.bates_number += 1
-		return img
-		
+		return img, bates_num_str
+
+	def bates_num_str(self):
+		bates_num = self.bates_number
+		self.bates_number += 1
+		bates_num_str = (('0'*self.bates_digits) + str(bates_num))[-self.bates_digits:]
+		return bates_num_str
+	
 	def resize(self, img):
+		tw = int(self.target_width * self.target_dpi)
+		th = int(self.target_height * self.target_dpi)
+		img = ImageOps.contain(img, (tw, th))
+		return img
+
+	def resize_gpt(self, img, width=None, height=None):
+		"""Resizes an image while maintaining its aspect ratio, and ensuring that neither the
+		width nor the height of the image is increased."""
+		img_width, img_height = img.size
+		if width is None:
+			width = self.target_width * self.target_dpi
+		else:
+			width *= self.target_dpi
+		if height is None:
+			height = self.target_height * self.target_dpi
+		else:
+			height *= self.target_dpi
+		print(width, height, self.target_dpi, img_width, img_height)
+		if img_width / img_height > width / height:
+			# The width of the image is greater than the target width/height ratio
+			new_width = int(img_height * (width / height))
+			new_height = img_height
+		else:
+			# The height of the image is greater than the target width/height ratio
+			new_width = img_width
+			new_height = int(img_width * (height / width))
+		resized_img = img.resize((new_width, new_height))
+		return resized_img
+
+	def resize_old(self, img):
 		"""
 		Resize an image to a uniform, fixed size, preserving the aspect ratio.
 
@@ -158,17 +200,20 @@ class PhotoFixer():
 		with Image.open(filepath) as img:
 			date_str = self.date_taken(img)
 			img = self.resize(img)
-			img = self.bates_stamp(img)
+			img, bates_num_str = self.bates_stamp(img)
 			filename = self.base_name(filepath)
-			pdf_name = f'{date_str} - {filename}.pdf'
+			if self.bates_number != 0:
+				pdf_name = f'{bates_num_str} - {filename}.pdf'
+			else:
+				pdf_name = f'{filename}.pdf'
 			pdf_path = os.path.join(output_subdir, pdf_name)
-			img.save(pdf_path, 'PDF', resolution=self.target_dpi)
+			img.save(pdf_path, 'PDF', resolution=float(self.target_dpi), save_all=True)
 
 """
 Reference usage of the PhotoFixer() class.
 """
 if __name__ == '__main__':
-	fixer = PhotoFixer()
+	fixer = PhotoFixer(root_dir='collard_deleted_dad', output_path='collard_deleted_dad_pdf')
 	fixer.bates_prefix = input("Bates prefix (include trailing space if needed): ")
 	fixer.bates_suffix = input("Bates suffix (include leading space if needed) : ")
 	fixer.bates_number = int(input("Starting Bates number                          : "))
@@ -180,6 +225,13 @@ if __name__ == '__main__':
 		
 		# Process each file in the folder
 		for file in files:
+			file_type = os.path.splitext(file)[1]
+			if file_type.lower() not in fixer.valid_file_types:
+				source = os.path.join(subdir, file)
+				destination = os.path.join(fixer.output_path, f'{fixer.bates_num_str()} - {file}')
+				print(f"Copying {source} to {destination}".center(80, "*"))
+				shutil.copy(source, destination)
+				continue
 			print(file.center(80, "*"))
 			filename = os.path.join(subdir, file)
 			if not os.path.isdir(filename):
