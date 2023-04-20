@@ -1,3 +1,6 @@
+hachoir==3.2.0
 Pillow>=9.5.0
 pillow-heif>=0.10.1
+pyicloud>=1.0.0
+PySimpleGUI==4.60.4
 python-dotenv>=1.0.0

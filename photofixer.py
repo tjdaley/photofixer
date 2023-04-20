@@ -4,9 +4,13 @@ photofixer.py - Class for fixing photos to produce in discovery
 import json
 import os
 from datetime import datetime
-from PIL import Image, ExifTags, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ExifTags, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
 from pillow_heif import register_heif_opener
+import piexif
+import PySimpleGUI as sg
 import shutil
+from hachoir.parser import createParser
+from hachoir.metadata import extractMetadata
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -33,6 +37,7 @@ class PhotoFixer():
 		self.target_height = float(os.environ.get('target_height', 9.0))
 		self.target_dpi = int(os.environ.get('target_dpi', 300))
 		self.filename_date_format = os.environ.get('filename_date_format', '%Y-%m-%d')
+		self.image_date_format = os.environ.get('image_date_format', '%m/%d/%Y %H:%M:%S')
 		self.points_per_inch = int(os.environ.get('points_per_inch', 72))
 		self.valid_file_types = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
 		register_heif_opener()
@@ -90,7 +95,76 @@ class PhotoFixer():
 					exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items()} #if k in ExifTags.TAGS}
 					return exif
 		return {}
+
+	def image_date(self, filepath: str) -> datetime:
+		"""
+		Return the date the image was taken. If the image does not have an EXIF date then
+		return None.
+
+		Args:
+			filepath (str): Full path to the file
+
+		Returns:
+			(datetime): Date the image was taken.
+		"""
+		image_exif = None
+		try:
+			with Image.open(filepath) as img:
+				image_exif = img.getexif()
+		except UnidentifiedImageError:
+			pass
+		if image_exif:
+			# Make a map with tag names and grab the datetime
+			exif = { ExifTags.TAGS[k]: v for k, v in image_exif.items() if k in ExifTags.TAGS and type(v) is not bytes }
+			if 'DateTime' in exif:
+				#print(f"DateTime: {exif['DateTime']}")
+				date = datetime.strptime(exif['DateTime'], '%Y:%m:%d %H:%M:%S')
+				return date
+
+		parser = createParser(filename)
+		metadata = extractMetadata(parser)
+		z=json.dumps(metadata, indent=4, sort_keys=True, default=str)
+		parts = z.split('\\n')
+		for part in parts:
+			#print(f"part: {part}")
+			if 'creation date' in part.lower():
+				date_str = part.split(': ')[1].strip()
+				date = datetime.strptime(date_str.replace('-', ':'), '%Y:%m:%d %H:%M:%S')
+				#print(f"date: {date}")
+				return date
+		return None
 		
+	def date_stamp(self, img, date: datetime = None):
+		"""
+		Apply a date stamp to the image.
+
+		Args:
+			img (PIL.Image): Image data to which to add the Bates stamp.
+
+		Returns:
+			(PIL.Image): Modified image
+		"""
+		if date is None:
+			return img
+		date_str = date.strftime(self.image_date_format)
+		draw = ImageDraw.Draw(img)
+		left, top, right, bottom = draw.textbbox((0,0), date_str, self.font)
+		box_width = right - left
+		box_height = bottom - top
+		box_width += self.text_margin
+		box_height += self.text_margin
+		box_x = self.box_margin * self.points_per_inch
+		box_y = img.height - box_height - (self.box_margin * self.points_per_inch)
+		rectangle_dimensions = (box_x, box_y, box_x + box_width, box_y + box_height)
+		draw.rectangle(rectangle_dimensions, fill=self.box_color)
+		draw.text(
+			(box_x + self.text_margin//2, box_y - self.text_margin//2),
+			date_str,
+			fill=self.text_color,
+			font=self.font
+		)
+		return img
+
 	def bates_stamp(self, img):
 		"""
 		Apply a Bates stamp to the image.
@@ -118,7 +192,7 @@ class PhotoFixer():
 		rectangle_dimensions = (box_x, box_y, box_x + box_width, box_y + box_height)
 		draw.rectangle(rectangle_dimensions, fill=self.box_color)
 		draw.text(
-			(box_x + self.text_margin//2, box_y + self.text_margin//2),
+			(box_x + self.text_margin//2, box_y - self.text_margin//2),
 			bates_str,
 			fill=self.text_color,
 			font=self.font
@@ -127,64 +201,29 @@ class PhotoFixer():
 		return img, bates_num_str
 
 	def bates_num_str(self):
+		"""
+		Return a string containing the current Bates number, padded with leading zeros.
+		"""
 		bates_num = self.bates_number
 		self.bates_number += 1
 		bates_num_str = (('0'*self.bates_digits) + str(bates_num))[-self.bates_digits:]
 		return bates_num_str
 	
 	def resize(self, img):
+		"""
+		Resize the image to the target dimensions.
+
+		Args:
+			img (PIL.Image): Image data to resize.
+
+		Returns:
+			(PIL.Image): Modified image
+		"""
 		tw = int(self.target_width * self.target_dpi)
 		th = int(self.target_height * self.target_dpi)
 		img = ImageOps.contain(img, (tw, th))
 		return img
 
-	def resize_gpt(self, img, width=None, height=None):
-		"""Resizes an image while maintaining its aspect ratio, and ensuring that neither the
-		width nor the height of the image is increased."""
-		img_width, img_height = img.size
-		if width is None:
-			width = self.target_width * self.target_dpi
-		else:
-			width *= self.target_dpi
-		if height is None:
-			height = self.target_height * self.target_dpi
-		else:
-			height *= self.target_dpi
-		print(width, height, self.target_dpi, img_width, img_height)
-		if img_width / img_height > width / height:
-			# The width of the image is greater than the target width/height ratio
-			new_width = int(img_height * (width / height))
-			new_height = img_height
-		else:
-			# The height of the image is greater than the target width/height ratio
-			new_width = img_width
-			new_height = int(img_width * (height / width))
-		resized_img = img.resize((new_width, new_height))
-		return resized_img
-
-	def resize_old(self, img):
-		"""
-		Resize an image to a uniform, fixed size, preserving the aspect ratio.
-
-		Args:
-			img (PIL.Image): Input image data from original image file.
-
-		Returns:
-			(PIL.Image): New image, resized per values set in environment variables.
-		"""
-		original_width, original_height = img.size
-		if original_width >= original_height:
-			aspect_ratio = original_height / original_width
-			tw = self.target_height
-			th = self.target_width
-		else:
-			aspect_ratio = original_width / original_height
-			tw = self.target_width
-			th = self.target_height
-		target_width_px = int(tw * aspect_ratio * self.target_dpi)
-		target_height_px = int(th * aspect_ratio * self.target_dpi)
-		return img.resize((target_width_px, target_height_px))
-		
 	def convert(self, filepath: str, output_path: str):
 		"""
 		Read an image file, extract the date it was taken, resize the image, and apply
@@ -198,25 +237,83 @@ class PhotoFixer():
 			None
 		"""
 		with Image.open(filepath) as img:
-			date_str = self.date_taken(img)
+			image_date = self.image_date(filepath)
+			if image_date:
+				image_date_str = ' (' + image_date.strftime(self.filename_date_format) + ')'
+			else:
+				image_date_str = ''
 			img = self.resize(img)
 			img, bates_num_str = self.bates_stamp(img)
+			img = self.date_stamp(img, image_date)
 			filename = self.base_name(filepath)
 			if self.bates_number != 0:
-				pdf_name = f'{bates_num_str} - {filename}.pdf'
+				pdf_name = f'{bates_num_str} - {filename}{image_date_str}.pdf'
 			else:
-				pdf_name = f'{filename}.pdf'
+				pdf_name = f'{filename}{image_date_str}.pdf'
 			pdf_path = os.path.join(output_subdir, pdf_name)
 			img.save(pdf_path, 'PDF', resolution=float(self.target_dpi), save_all=True)
+
+def get_params():
+	"""
+	Use PySimpleGUI to get the user's input parameters. THe parameters are
+	(1) Source Folder; (2) Destination Folder; (3) Bates Prefix; (4) Bates Suffix;
+	(5) Bates Number; and (6) Bates Digits.
+	"""
+	# Define the window's contents
+	image_elem = sg.Image(
+		filename='./assets/splash_logo_400x267.png',
+		key='-LOGO-',
+		size=(400, 267)
+	)
+
+	width = 15
+	layout = [
+		[image_elem],
+		[
+			sg.Text(
+				f"PhotoFixer 0.0.1",
+				justification='center',
+				expand_x=True,
+				font=('Helvetica', 25),
+				text_color="yellow"
+			)
+		],
+		[sg.Text("Source Folder", size=width), sg.Input(key='-SOURCE-'), sg.FolderBrowse()],
+		[sg.Text("Destination Folder", size=width), sg.Input(key='-DEST-'), sg.FolderBrowse()],
+		[sg.Text("Bates Prefix", size=width), sg.Input(key='-PREFIX-')],
+		[sg.Text("Bates Suffix", size=width), sg.Input(key='-SUFFIX-')],
+		[sg.Text("Starting Bates Number", size=width), sg.Input(key='-NUMBER-')],
+		[sg.Text("Bates Digits", size=width), sg.Input(key='-DIGITS-')],
+		[sg.Button('Ok'), sg.Button('Cancel')],
+	]
+
+	# Create the window
+	window = sg.Window('Photo Fixer', layout)
+
+	# Display and interact with the Window using an Event Loop
+	event, values = window.read(close=True)
+	return values
 
 """
 Reference usage of the PhotoFixer() class.
 """
 if __name__ == '__main__':
-	fixer = PhotoFixer(root_dir='collard_deleted_dad', output_path='collard_deleted_dad_pdf')
-	fixer.bates_prefix = input("Bates prefix (include trailing space if needed): ")
-	fixer.bates_suffix = input("Bates suffix (include leading space if needed) : ")
-	fixer.bates_number = int(input("Starting Bates number                          : "))
+	params = get_params()
+	source_dir = params['-SOURCE-']
+	dest_dir = params['-DEST-']
+	bates_prefix = params['-PREFIX-']
+	bates_suffix = params['-SUFFIX-']
+	bates_number = int(params['-NUMBER-'])
+	bates_digits = int(params['-DIGITS-'])
+
+	fixer = PhotoFixer(
+		root_dir=source_dir,
+		output_path=dest_dir,
+	)
+	fixer.bates_prefix = bates_prefix
+	fixer.bates_suffix = bates_suffix
+	fixer.bates_number = bates_number
+	fixer.bates_digits = bates_digits
 	for subdir, dirs, files in os.walk(fixer.root_dir):
 		# Create target folder
 		relative_subdir = os.path.relpath(subdir, fixer.root_dir)
@@ -225,15 +322,29 @@ if __name__ == '__main__':
 		
 		# Process each file in the folder
 		for file in files:
-			file_type = os.path.splitext(file)[1]
-			if file_type.lower() not in fixer.valid_file_types:
-				source = os.path.join(subdir, file)
-				destination = os.path.join(fixer.output_path, f'{fixer.bates_num_str()} - {file}')
-				print(f"Copying {source} to {destination}".center(80, "*"))
-				shutil.copy(source, destination)
-				continue
 			print(file.center(80, "*"))
 			filename = os.path.join(subdir, file)
-			if not os.path.isdir(filename):
-				fixer.convert(filename, output_subdir)
-				# print(fixer.meta_list(filename))
+			file_type = os.path.splitext(file)[1]
+
+			# Nothing to do for directories.
+			if os.path.isdir(filename):
+				continue
+
+			# Copy files that are not images.
+			if file_type.lower() not in fixer.valid_file_types:
+				source = os.path.join(subdir, file)
+				file_date = fixer.image_date(source)
+				if file_date:
+					file_date_str = ' (' + file_date.strftime(fixer.filename_date_format) + ')'
+				else:
+					file_date_str = ''
+				basename = os.path.splitext(file)[0]
+				file_type = os.path.splitext(file)[1]
+				destination = os.path.join(fixer.output_path, f'{basename}{file_date_str}{file_type}')
+				#print(f"Copying {source} to {destination}".center(80, "*"))
+				shutil.copy(source, destination)
+				continue
+
+			# Process images.
+			fixer.convert(filename, output_subdir)
+			# print(fixer.image_date(filename))
