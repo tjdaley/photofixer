@@ -55,10 +55,48 @@ If you want to just run it as is, the app will look for a folder called ```input
 
 ```
 python photofixer.py
-Bates prefix (include trailing space if needed): TJD
-Bates suffix (include leading space if needed) :  (produced 01/29/2023)
-Staring Bates number                           : 1
 ```
+
+<img width="412" alt="PhotoFixerGui" src="https://user-images.githubusercontent.com/14339485/234171120-43336df4-7253-471d-bb6f-843bbf2d1c21.png">
+
+### Field Descriptions
+Name | Description | Required?
+-----|-------------|----------
+Source Folder | The top-level folder to process. *photofixer* will traverse through all subfolders, replicating the folder structure in the *Destination Folder*. | Yes
+Destination Folder | The top-level folder to copy files to. *photofixer* will replicate the structure of the *Source Folder* and its children here. | Yes
+Bates Prefix | Characters to place before the Bates number. If you want a space between the characters and the Bates number, include it here. For example, if you enter "TJD" as the Bates Prefix, the Bates stamps will look like "TJD000001". If you enter "TJD " as the Bates Prefix, the Bates stamps will look like "TJD 000001". | No
+Bates Suffix | Characters to place after the Bates number. If you want a space between the Bates number and these characters, then enter it here. For example if the Bates Suffix is "(Produced 2023.04.24)" then the Bates numbers will loo like "000001(Produced 2023.04.24)". If you precede the characters with a space, e.g. " (Produced 2023.04.24)", the Bates stampe will look like "000001 (Produced 2023.04.24)". | No
+Starting Bates Number | The Bates number to start with. If you do NOT want your documents to be Bates labeled, enter "0" (zero) as the starting number. Otherwise, enter the integer number at which you want Bates numbering to begin. | Yes
+Bates Digits | This is the number of digits that the Bates number will be left-zero-filled to produce. For example, if you enter 6 as the Bates Digits value, then the Bates numbers will look like this: 000001, 000002, 000003, etc. If you enter, say, 4, they will look like this: 0001, 0002, 0003, etc. This number is required if Starting Bates Number is an integer value greater than one, i.e. you want the photos to be Bates numbered. Otherwise, the value is not needed. | No
+
+## Future Enhancements
+
+### Bullet-Proof GUI
+
+Right now, a careless user can blow up the program by entering invalid values or skipping required values. No harm is done, but it's annoying for a program to let you mess up and then laugh at you.
+
+Also, provide GUI access to all possible settings.
+
+### Preserve Settings
+
+Save settings between sessions so that you can easily re-run the program with the same settings.
+
+### Allow User-Defined Date/Time Format
+
+The description says it all.
+
+### Permit Users to Select Colors and Alpha Channels
+
+Let the user select back ground colors, no background color, and the alpha channel for see-throguh backgrounds. Let the user select foreground colors.
+
+### Create an Output Log
+
+Create an output log showing the Bates number and the file name.
+
+###
+
+Install as a package so that it's easier to create a click to install/click to run interface that does not require an excursion into the command line interface.
+
 ## Author
 
 Thomas J. Daley is a Texas Family Law litigation attorney board certified in family law by the Texas Board of Legal Specialization. He practices primarily in Collin, Dallas, Denton, Rockwall, and Tarrant counties in Texas and appears pro hac vice in cases throughout the United States.
