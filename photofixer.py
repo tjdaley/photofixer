@@ -40,6 +40,7 @@ class PhotoFixer():
 		self.image_date_format = os.environ.get('image_date_format', '%m/%d/%Y %H:%M:%S')
 		self.points_per_inch = int(os.environ.get('points_per_inch', 72))
 		self.valid_file_types = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
+		self.movie_file_types = ['.mov', '.mp4', '.avi', '.wmv', '.mpg', '.mpeg', '.m4v']
 		register_heif_opener()
 		
 	def date_taken(self, img):
@@ -197,7 +198,6 @@ class PhotoFixer():
 			fill=self.text_color,
 			font=self.font
 		)
-		self.bates_number += 1
 		return img, bates_num_str
 
 	def bates_num_str(self):
@@ -332,6 +332,11 @@ if __name__ == '__main__':
 
 			# Copy files that are not images.
 			if file_type.lower() not in fixer.valid_file_types:
+				if file_type.lower() in fixer.movie_file_types:
+					bates_str = fixer.bates_stamp_str()
+				else:
+					bates_str = 'X' * fixer.bates_digits
+
 				source = os.path.join(subdir, file)
 				file_date = fixer.image_date(source)
 				if file_date:
@@ -340,11 +345,9 @@ if __name__ == '__main__':
 					file_date_str = ''
 				basename = os.path.splitext(file)[0]
 				file_type = os.path.splitext(file)[1]
-				destination = os.path.join(fixer.output_path, f'{basename}{file_date_str}{file_type}')
-				#print(f"Copying {source} to {destination}".center(80, "*"))
+				destination = os.path.join(fixer.output_path, f'{bates_str} - {basename}{file_date_str}{file_type}')
 				shutil.copy(source, destination)
 				continue
 
 			# Process images.
 			fixer.convert(filename, output_subdir)
-			# print(fixer.image_date(filename))
