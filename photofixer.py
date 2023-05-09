@@ -11,6 +11,7 @@ import PySimpleGUI as sg
 import shutil
 from hachoir.parser import createParser
 from hachoir.metadata import extractMetadata
+import cv2
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -39,7 +40,9 @@ class PhotoFixer():
 		self.filename_date_format = os.environ.get('filename_date_format', '%Y-%m-%d')
 		self.image_date_format = os.environ.get('image_date_format', '%m/%d/%Y %H:%M:%S')
 		self.points_per_inch = int(os.environ.get('points_per_inch', 72))
-		self.valid_file_types = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
+		self.valid_photo_file_types = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
+		self.valid_video_file_types = ['.mp4', '.mov', '.avi', '.wmv', '.mpg', '.mpeg', '.mkv']
+		self.tmp_dir = os.environ.get('tmp_dir', 'tmp')
 		register_heif_opener()
 		
 	def date_taken(self, img):
@@ -253,6 +256,27 @@ class PhotoFixer():
 			pdf_path = os.path.join(output_subdir, pdf_name)
 			img.save(pdf_path, 'PDF', resolution=float(self.target_dpi), save_all=True)
 
+	def tmp_video_file(self, filename: str) -> str:
+		"""
+		Use CV2 to capture a single video frame at the one second mark and save it as
+		a temporary file, returning the filename.
+
+		Args:
+			filename (str): Path to the video file
+
+		Returns:
+			(str): Path to the temporary image file
+		"""
+		cap = cv2.VideoCapture(filename)
+		cap.set(cv2.CAP_PROP_POS_MSEC, 1000)
+		success, image = cap.read()
+		if success:
+			tmp_filename = os.path.join(self.tmp_dir, f'{self.base_name(filename)}_frame.png')
+			cv2.imwrite(tmp_filename, image)
+			return tmp_filename
+		else:
+			return None
+
 def get_params():
 	"""
 	Use PySimpleGUI to get the user's input parameters. THe parameters are
@@ -271,7 +295,7 @@ def get_params():
 		[image_elem],
 		[
 			sg.Text(
-				f"PhotoFixer 0.0.1",
+				f"PhotoFixer 0.0.2",
 				justification='center',
 				expand_x=True,
 				font=('Helvetica', 25),
@@ -284,6 +308,8 @@ def get_params():
 		[sg.Text("Bates Suffix", size=width), sg.Input(key='-SUFFIX-')],
 		[sg.Text("Starting Bates Number", size=width), sg.Input(key='-NUMBER-')],
 		[sg.Text("Bates Digits", size=width), sg.Input(key='-DIGITS-')],
+		[sg.Text("Max file count", size=width), sg.Input(key='-MAX_FILES-')],
+		[sg.Checkbox("Skip non-images", key='-SKIP_NONIMAGES-')],
 		[sg.Button('Ok'), sg.Button('Cancel')],
 	]
 
@@ -294,6 +320,16 @@ def get_params():
 	event, values = window.read(close=True)
 	return values
 
+def _safeint(s) -> int:
+	"""
+	Safely convert a string to an integer. If the string cannot be converted,
+	return 0.
+	"""
+	try:
+		return int(s)
+	except ValueError:
+		return 0
+
 """
 Reference usage of the PhotoFixer() class.
 """
@@ -303,8 +339,10 @@ if __name__ == '__main__':
 	dest_dir = params['-DEST-']
 	bates_prefix = params['-PREFIX-']
 	bates_suffix = params['-SUFFIX-']
-	bates_number = int(params['-NUMBER-'])
-	bates_digits = int(params['-DIGITS-'])
+	bates_number = _safeint(params['-NUMBER-'])
+	bates_digits = _safeint(params['-DIGITS-'])
+	max_files = _safeint(params['-MAX_FILES-'])
+	skip_nonimages = params['-SKIP_NONIMAGES-']
 
 	fixer = PhotoFixer(
 		root_dir=source_dir,
@@ -314,6 +352,9 @@ if __name__ == '__main__':
 	fixer.bates_suffix = bates_suffix
 	fixer.bates_number = bates_number
 	fixer.bates_digits = bates_digits
+	valid_file_types = fixer.valid_photo_file_types + fixer.valid_video_file_types
+	file_count = 0
+
 	for subdir, dirs, files in os.walk(fixer.root_dir):
 		# Create target folder
 		relative_subdir = os.path.relpath(subdir, fixer.root_dir)
@@ -322,16 +363,25 @@ if __name__ == '__main__':
 		
 		# Process each file in the folder
 		for file in files:
+			# Stop if we've reached the maximum file count.
+			if file_count >= max_files and max_files > 0:
+				break
+
 			print(file.center(80, "*"))
 			filename = os.path.join(subdir, file)
-			file_type = os.path.splitext(file)[1]
+			file_type = os.path.splitext(file)[1].lower()
+
+			# Skip non-images if requested.
+			if skip_nonimages and file_type not in valid_file_types:
+				continue
 
 			# Nothing to do for directories.
 			if os.path.isdir(filename):
 				continue
 
 			# Copy files that are not images.
-			if file_type.lower() not in fixer.valid_file_types:
+			if file_type not in valid_file_types:
+				file_count += 1
 				source = os.path.join(subdir, file)
 				file_date = fixer.image_date(source)
 				if file_date:
@@ -345,6 +395,17 @@ if __name__ == '__main__':
 				shutil.copy(source, destination)
 				continue
 
-			# Process images.
-			fixer.convert(filename, output_subdir)
-			# print(fixer.image_date(filename))
+			if file_type in fixer.valid_photo_file_types:
+				# Process photos.
+				file_count += 1
+				fixer.convert(filename, output_subdir)
+				continue
+
+			if file_type in fixer.valid_video_file_types:
+				# Process videos.
+				file_count += 1
+				tmp_filename = fixer.tmp_video_file(filename)
+				if tmp_filename:
+					fixer.convert(tmp_filename, output_subdir)
+					os.remove(tmp_filename)
+				continue
