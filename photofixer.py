@@ -200,7 +200,6 @@ class PhotoFixer():
 			fill=self.text_color,
 			font=self.font
 		)
-		self.bates_number += 1
 		return img, bates_num_str
 
 	def bates_num_str(self):
@@ -390,8 +389,7 @@ if __name__ == '__main__':
 					file_date_str = ''
 				basename = os.path.splitext(file)[0]
 				file_type = os.path.splitext(file)[1]
-				destination = os.path.join(fixer.output_path, f'{basename}{file_date_str}{file_type}')
-				#print(f"Copying {source} to {destination}".center(80, "*"))
+				destination = os.path.join(fixer.output_path, f'{bates_str} - {basename}{file_date_str}{file_type}')
 				shutil.copy(source, destination)
 				continue
 
