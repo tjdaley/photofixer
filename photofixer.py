@@ -38,7 +38,7 @@ class PhotoFixer():
 		self.target_height = float(os.environ.get('target_height', 9.0))
 		self.target_dpi = int(os.environ.get('target_dpi', 300))
 		self.filename_date_format = os.environ.get('filename_date_format', '%Y-%m-%d')
-		self.image_date_format = os.environ.get('image_date_format', '%m/%d/%Y %H:%M:%S')
+		self.image_date_format = os.environ.get('image_date_format', '%m/%d/%Y')
 		self.points_per_inch = int(os.environ.get('points_per_inch', 72))
 		self.valid_photo_file_types = ['.jpg', '.jpeg', '.png', '.heic', '.heif']
 		self.valid_video_file_types = ['.mp4', '.mov', '.avi', '.wmv', '.mpg', '.mpeg', '.mkv']
@@ -407,4 +407,18 @@ if __name__ == '__main__':
 				if tmp_filename:
 					fixer.convert(tmp_filename, output_subdir)
 					os.remove(tmp_filename)
+
+				# Copy the original file.
+				source = os.path.join(subdir, file)
+				file_date = fixer.image_date(source)
+				if file_date:
+					file_date_str = ' (' + file_date.strftime(fixer.filename_date_format) + ')'
+				else:
+					file_date_str = ''
+
+				basename = os.path.splitext(file)[0]
+				file_type = os.path.splitext(file)[1]
+				bates_str = fixer.bates_num_str()
+				destination = os.path.join(fixer.output_path, f'{bates_str} - {basename}{file_date_str}{file_type}')
+				shutil.copy(filename, destination)
 				continue
