@@ -1,6 +1,10 @@
 # photofixer
 Prepares image files for production in discovery by converting to PDF and applying a Bates label.
 
+## TODO
+
+1. Verify existence of tmp directory. Offer to create if not present. Otherwise, end.
+
 ## Problem
 
 Clients share image files (jpg, png, meic, tif) that are responsive to requests for production or which must be disclosed prior to trial. Further complicating matters, the image files can contain images of any size from huge to quite small. Litigtion support staff must then resize the images, convert them to PDF files, and then apply Bates numbers. This is a tedious and time-consuming process that not only burns scarce litigation support resources but also imposes unnecessary costs to the client.
@@ -31,6 +35,7 @@ target_dpi | Resolution of the output image in dots per inch | 300
 target_height | Height of the output image in inches | 9.0
 target_width | Width of the output image in inches | 6.5
 text_color | Color of text used in Bates labeling | "black"
+tmp_dir | Temporary folder used for saving frames from movies | "tmp"
 
 ## Required packages
 
