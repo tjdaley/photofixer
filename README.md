@@ -3,7 +3,8 @@ Prepares image files for production in discovery by converting to PDF and applyi
 
 ## TODO
 
-1. Verify existence of tmp directory. Offer to create if not present. Otherwise, end.
+1. Permit different time/date format for file name and imprinted onto image.
+2. If timezone is present, indicate timezone NAME, otherwise, do not.
 
 ## Problem
 
