@@ -136,7 +136,6 @@ class PhotoFixer():
 		with Image.open(filepath) as img:
 			if hasattr(img, "_getexif"):
 				exif_data = img._getexif()
-				print("Meta_List():", exif_data)
 				if exif_data:
 					exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items()} #if k in ExifTags.TAGS}
 					return exif
