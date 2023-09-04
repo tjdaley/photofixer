@@ -3,10 +3,11 @@ photofixer.py - Class for fixing photos to produce in discovery
 """
 import json
 import os
+import re
 from datetime import datetime
-from PIL import Image, ExifTags, ImageDraw, ImageFont, ImageOps, UnidentifiedImageError
+from dateutil import parser as date_parser
+from PIL import Image, ExifTags, ImageDraw, ImageFont, ImageOps
 from pillow_heif import register_heif_opener
-import piexif
 import PySimpleGUI as sg
 import shutil
 from hachoir.parser import createParser
@@ -44,14 +45,44 @@ class PhotoFixer():
 		self.valid_video_file_types = ['.mp4', '.mov', '.avi', '.wmv', '.mpg', '.mpeg', '.mkv']
 		self.tmp_dir = os.environ.get('tmp_dir', 'tmp')
 		register_heif_opener()
+	
+	def fix_malformed_date(self, date_str: str) -> str:
+		"""
+		Fix malformed date strings. For example, some cameras use a date format like
+		```2020-12-31 23:59:59-05:00``` which is not a valid ISO 8601 date. This method
+		fixes that by removing the colon from the timezone offset, resulting in a date
+		string like ```2020-12-31 23:59:59-0500```.
+
+		Also, some cameras use a date format like ```2020:12:31 23:59:59``` which is not
+		a valid ISO 8601 date. This method fixes that by replacing the colons with dashes,
+		resulting in a date string like ```2020-12-31 23:59:59```.
+
+		Args:
+			date_str (str): Date string to fix.
+
+		Returns:
+			(str): Fixed date string.
+		"""
+		result = date_str
+
+		# Fix malformed date strings like 2020-12-31 23:59:59-05:00
+		if date_str[-3] == ':' and date_str[-6] == '-':
+			result = date_str[:-3] + date_str[-2:]
+
+		# Fix malformed date strings like 2020:12:31 23:59:59
+		if malformed := re.match("(\d)+:(\d+):(\d+) (\d+:\d+:\d+)", result):
+			result = f"{malformed.group(0)}-{malformed.group(1)}-{malformed.group(2)} {malformed.group(3)}"
+
+		return result
 		
-	def date_taken(self, img):
+	def date_taken(self, filepath, img) -> str:
 		"""
 		Return a string containing the date the photograph was taken. Uses the *filename_date_format*
 		environment variable to specify the format of the output string. If unable to determine the date
 		then an empty string is returned.
 
 		Args:
+			filepath (str): Full path to the file
 			img (PIL.Image): Image data to read.
 
 		Returns:
@@ -59,11 +90,23 @@ class PhotoFixer():
 		"""
 		result = ''
 		try:
-			date_taken_str = img._getexif.get(36867)
-			date_taken = datetime.strptime(date_taken_str, '%Y:%m:%d %H:%M:%S')
-			result = date_taken.strftime(self.filename_date_format)
+			exif_data = self.meta_list(filepath)
+			date_taken_str = exif_data.get('DateTimeOriginal')
+			if date_taken_str is None:
+				date_taken_str = exif_data.get('DateTime')
+			if date_taken_str is None:
+				date_taken_str = exif_data.get('CreateDate')
+			if date_taken_str is None:
+				date_taken_str = exif_data.get('FileModifyDate')
+			if date_taken_str is None:
+				date_taken_str = exif_data.get('FileCreateDate')
+			if date_taken_str is None:
+				return ''
+			date_taken_str = self.fix_malformed_date(date_taken_str)
+			date_taken_dt = date_parser.parse(date_taken_str)
+			result = date_taken_dt.strftime(self.filename_date_format)
 		except Exception as e:
-			# print(f"Error extracting exif data: {str(e)}")
+			print(f"date_taken(): Error extracting exif data: {str(e)}")
 			pass
 		return result
 		
@@ -93,37 +136,29 @@ class PhotoFixer():
 		with Image.open(filepath) as img:
 			if hasattr(img, "_getexif"):
 				exif_data = img._getexif()
-				print(exif_data)
+				print("Meta_List():", exif_data)
 				if exif_data:
 					exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items()} #if k in ExifTags.TAGS}
 					return exif
 		return {}
 
-	def image_date(self, filepath: str) -> datetime:
+	def image_date(self, filepath: str, image) -> str:
 		"""
 		Return the date the image was taken. If the image does not have an EXIF date then
 		return None.
 
 		Args:
 			filepath (str): Full path to the file
+			image (PIL.Image): Image data to read.
 
 		Returns:
-			(datetime): Date the image was taken.
+			(str): Date the image was taken.
 		"""
-		image_exif = None
-		try:
-			with Image.open(filepath) as img:
-				image_exif = img.getexif()
-		except UnidentifiedImageError:
-			pass
-		if image_exif:
-			# Make a map with tag names and grab the datetime
-			exif = { ExifTags.TAGS[k]: v for k, v in image_exif.items() if k in ExifTags.TAGS and type(v) is not bytes }
-			if 'DateTime' in exif:
-				#print(f"DateTime: {exif['DateTime']}")
-				date = datetime.strptime(exif['DateTime'], '%Y:%m:%d %H:%M:%S')
-				return date
+		# If this is an image or video file, look for the date taken in the EXIF data.
+		if os.path.splitext(filepath)[1].lower() in self.valid_photo_file_types + self.valid_video_file_types:
+			return self.date_taken(filepath, image)
 
+		# If this is a PDF file, look for the date created in the metadata.
 		parser = createParser(filename)
 		metadata = extractMetadata(parser)
 		z=json.dumps(metadata, indent=4, sort_keys=True, default=str)
@@ -135,21 +170,22 @@ class PhotoFixer():
 				date = datetime.strptime(date_str.replace('-', ':'), '%Y:%m:%d %H:%M:%S')
 				#print(f"date: {date}")
 				return date
+
 		return None
 		
-	def date_stamp(self, img, date: datetime = None):
+	def date_stamp(self, img, date_str: str = None):
 		"""
 		Apply a date stamp to the image.
 
 		Args:
 			img (PIL.Image): Image data to which to add the Bates stamp.
+			date_str (str): Date string to add to the image.
 
 		Returns:
 			(PIL.Image): Modified image
 		"""
-		if date is None:
+		if date_str is None:
 			return img
-		date_str = date.strftime(self.image_date_format)
 		draw = ImageDraw.Draw(img)
 		left, top, right, bottom = draw.textbbox((0,0), date_str, self.font)
 		box_width = right - left
@@ -226,7 +262,7 @@ class PhotoFixer():
 		img = ImageOps.contain(img, (tw, th))
 		return img
 
-	def convert(self, filepath: str, output_path: str):
+	def convert(self, filepath: str, output_path: str, apply_timestamps: bool = False):
 		"""
 		Read an image file, extract the date it was taken, resize the image, and apply
 		a Bates label.
@@ -234,19 +270,21 @@ class PhotoFixer():
 		Args:
 			filepath (str): Path to the input file, e.g. /input/holiday/photo1.png
 			output_path (str): Path for the output file, e.g. /output/holiday
+			apply_timestamps (bool): If True, apply timestamps to the image.
 
 		Returns:
 			None
 		"""
 		with Image.open(filepath) as img:
-			image_date = self.image_date(filepath)
-			if image_date:
-				image_date_str = ' (' + image_date.strftime(self.filename_date_format) + ')'
+			image_date_str = self.image_date(filepath, img)
+			if image_date_str:
+				image_date_str = ' (' + image_date_str + ')'
 			else:
 				image_date_str = ''
 			img = self.resize(img)
 			img, bates_num_str = self.bates_stamp(img)
-			img = self.date_stamp(img, image_date)
+			if apply_timestamps:
+				img = self.date_stamp(img, image_date_str)
 			filename = self.base_name(filepath)
 			if self.bates_number != 0:
 				pdf_name = f'{bates_num_str} - {filename}{image_date_str}.pdf'
@@ -294,7 +332,7 @@ def get_params():
 		[image_elem],
 		[
 			sg.Text(
-				f"PhotoFixer 0.0.2",
+				f"PhotoFixer 0.0.3",
 				justification='center',
 				expand_x=True,
 				font=('Helvetica', 25),
@@ -309,6 +347,7 @@ def get_params():
 		[sg.Text("Bates Digits", size=width), sg.Input(key='-DIGITS-')],
 		[sg.Text("Max file count", size=width), sg.Input(key='-MAX_FILES-')],
 		[sg.Checkbox("Skip non-images", key='-SKIP_NONIMAGES-')],
+		[sg.Checkbox("Apply timestamps", key='-TIMESTAMPS-')],
 		[sg.Button('Ok'), sg.Button('Cancel')],
 	]
 
@@ -316,7 +355,7 @@ def get_params():
 	window = sg.Window('Photo Fixer', layout)
 
 	# Display and interact with the Window using an Event Loop
-	event, values = window.read(close=True)
+	_, values = window.read(close=True)
 	return values
 
 def _safeint(s) -> int:
@@ -342,6 +381,7 @@ if __name__ == '__main__':
 	bates_digits = _safeint(params['-DIGITS-'])
 	max_files = _safeint(params['-MAX_FILES-'])
 	skip_nonimages = params['-SKIP_NONIMAGES-']
+	apply_timestamps = params['-TIMESTAMPS-']
 
 	fixer = PhotoFixer(
 		root_dir=source_dir,
@@ -353,6 +393,7 @@ if __name__ == '__main__':
 	fixer.bates_digits = bates_digits
 	valid_file_types = fixer.valid_photo_file_types + fixer.valid_video_file_types
 	file_count = 0
+	os.makedirs(fixer.tmp_dir, exist_ok=True)
 
 	for subdir, dirs, files in os.walk(fixer.root_dir):
 		# Create target folder
@@ -382,7 +423,7 @@ if __name__ == '__main__':
 			if file_type not in valid_file_types:
 				file_count += 1
 				source = os.path.join(subdir, file)
-				file_date = fixer.image_date(source)
+				file_date = fixer.image_date(source, None)
 				if file_date:
 					file_date_str = ' (' + file_date.strftime(fixer.filename_date_format) + ')'
 				else:
@@ -397,7 +438,7 @@ if __name__ == '__main__':
 			if file_type in fixer.valid_photo_file_types:
 				# Process photos.
 				file_count += 1
-				fixer.convert(filename, output_subdir)
+				fixer.convert(filename, output_subdir, apply_timestamps)
 				continue
 
 			if file_type in fixer.valid_video_file_types:
@@ -405,12 +446,12 @@ if __name__ == '__main__':
 				file_count += 1
 				tmp_filename = fixer.tmp_video_file(filename)
 				if tmp_filename:
-					fixer.convert(tmp_filename, output_subdir)
+					fixer.convert(tmp_filename, output_subdir, apply_timestamps)
 					os.remove(tmp_filename)
 
 				# Copy the original file.
 				source = os.path.join(subdir, file)
-				file_date = fixer.image_date(source)
+				file_date = fixer.image_date(source, None)
 				if file_date:
 					file_date_str = ' (' + file_date.strftime(fixer.filename_date_format) + ')'
 				else:
