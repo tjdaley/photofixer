@@ -22,9 +22,9 @@ dependencies = [
 ]
 classifiers = [
     "Programming Language :: Python :: 3.11",
-    "License :: BSD 3-Clause License",
+    "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
-    "Natural Langauge :: English",
+    "Natural Language :: English",
 ]
 
 [project.urls]
