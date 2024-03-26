@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "photofixer"
+version = "0.0.1"
+authors = [
+    { name="Thomas J. Daley", email="tom@powerdaley.com" },
+]
+description = "Add dates and timestamps to photos and convert to PDF"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "hachoir==3.2.0",
+    "Pillow>=9.5.0",
+    "pillow-heif>=0.10.1",
+    "piexif==1.1.3",
+    "pyicloud>=1.0.0",
+    "PySimpleGUI==4.60.4",
+    "python-dateutil>=2.8.2",
+    "python-dotenv>=1.0.0",
+    "opencv-python==4.7.0.72"
+]
+classifiers = [
+    "Programming Langauge :: Python :: 3.11",
+    "License :: BSD 3-Clause License",
+    "Operating System :: OS Independent",
+    "Natural Langauge :: English",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/tjdaley/photofixer"
+"Bug Tracker" = "https://github.com/tjdaley/photofixer/issues"
+"Developer's Blog" = "https://www.thomasjdaley.com"

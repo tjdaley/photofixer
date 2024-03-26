@@ -1,6 +1,12 @@
 # photofixer
 Prepares image files for production in discovery by converting to PDF and applying a Bates label.
 
+## Install
+
+```
+pip install git+https://github.com/tjdaley/photofixer.git --upgrade
+```
+
 ## TODO
 
 1. Permit different time/date format for file name and imprinted onto image.
