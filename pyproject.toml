@@ -21,7 +21,7 @@ dependencies = [
     "opencv-python==4.7.0.72"
 ]
 classifiers = [
-    "Programming Langauge :: Python :: 3.11",
+    "Programming Language :: Python :: 3.11",
     "License :: BSD 3-Clause License",
     "Operating System :: OS Independent",
     "Natural Langauge :: English",
