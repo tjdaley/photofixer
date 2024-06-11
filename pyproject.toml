@@ -12,13 +12,13 @@ description = "Add dates and timestamps to photos and convert to PDF"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "hachoir==3.2.0",
+    "hachoir>=3.2.0",
     "Pillow>=9.5.0",
     "pillow-heif>=0.10.1",
-    "PySimpleGUI==4.60.4",
+    "PySimpleGUI>=4.60.4",
     "python-dateutil>=2.8.2",
     "python-dotenv>=1.0.0",
-    "opencv-python==4.7.0.72"
+    "opencv-python>=4.7.0.72"
 ]
 classifiers = [
     "Programming Language :: Python :: 3.11",
